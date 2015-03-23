@@ -25,7 +25,7 @@ The main API consists in 2 functions:
   a reference by date
 
 ```elixir
-repo = Gitex.RefImpl.new
+repo = Gitex.Git.new
 Gitex.get(repo,"master") #get commit
 Gitex.get(repo,"myannotatedtag") #get tag object
 Gitex.get(repo,"master","/path/to/dir")  #get tree object
