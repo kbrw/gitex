@@ -7,8 +7,10 @@ Gitex
   versioning logic in a completely different environment and use case: JSON
   into Riak for instance.
 
-TODO:
+TODO (DO NOT USE IT SERIOUSLY YET):
 
+- test it
+- add a cache logic with an ETS LRU cache 
 - write commit implementation, currently read-only
 - add some useful alternative implementations, currently only standard object
   encoding and storage
