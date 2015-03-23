@@ -1,128 +1,9 @@
 
-defprotocol Git.Backend do
-  @type hash    :: String.t
-  @type refpath :: String.t
-
-  @spec resolve_ref(Git.Backend.t,refpath) :: hash
-  def resolve_ref(repo,ref)
-
-  @spec get_obj(Git.Backend.t,hash) :: binary
-  def get_obj(repo,hash)
-end
-
-defprotocol Git.Codec do
-  @type blob   :: binary
-  @type tag    :: %{tag: String.t, object: Git.Backend.hash}
-  @type commit :: %{tree: Git.Backend.hash,parent: Git.Backend.hash | [Git.Backend.hash]}
-  @type tree   :: [%{name: String.t, ref: Git.Backend.hash}]
-  @type gitobj :: blob | tag | commit | tree
-  @type type   :: :blob | :tag | :commit | :tree
-
-  @spec decode(Git.Backend.t,hash::Git.Backend.hash,{type,binary}) :: gitobj
-  def decode(repo,hash,bintype)
-
-  @spec encode(Git.Backend.t,gitobj) :: binary
-  def encode(repo,obj)
-end
-
-defmodule Git do
-  @moduledoc """
-    Git API to a repo which is a struct implementing Git.Codec and Git.Backend
-  """
-
-  @doc "get the decoded GIT object associated with a given hash"
-  def object(repo,hash), do:
-    Git.Codec.decode(repo,hash,Git.Backend.get_obj(repo,hash))
-     
-  @type hash   :: {:hash,String.t}
-  @type refpath:: {:refpath,String.t}
-  @type tag    :: {:tag,String.t}
-  @type branch :: {:branch,String.t}
-  @type remote :: {:remote,remote::String.t,:head | branch::String.t}
-  @type ref :: :head | tag | branch | remote
-  @doc """
-    get the decoded GIT object from a fuzzy reference : can be
-    either a `ref` or a binary which will be tested for
-    each reference type in this order : branch,tag,remote
-  """
-  def get(repo,ref), do:
-    object(repo,fuzzy_ref(repo,ref))
-
-  def get(repo,%{}=obj,path) , do: 
-    get_path(repo,obj,path)
-  def get(repo,ref,path), do: 
-    get_path(repo,get(repo,ref),path)
-
-  def history(repo,ref) do
-    Stream.resource(fn-> {object(repo,fuzzy_ref(repo,ref)),[]} end,fn
-      :nomore->{:halt,nil}
-      {current,others}->
-        to_compare = Enum.concat(Enum.map(parent_list(current),&object(repo,&1)) ,others)
-        nexts = to_compare |> Enum.uniq(& &1.hash) |> Enum.sort_by(& &1.committer.utc_time) |> Enum.reverse
-        case nexts do
-          [next|others]-> {[current],{next,others}}
-          []-> {[current],:nomore}
-        end
-    end,fn _->:done end)
-  end
-  def align(history) do
-    Stream.transform(history,{1,HashDict.new}, fn commit, {nextlevel,levels}=acc->
-      level = Dict.get(levels,commit.hash,0)
-      acc = case parent_list(commit) do
-        [head|tail]->
-          levels = Dict.update(levels,head,level,&min(&1,level))
-          Enum.reduce(tail,{nextlevel,levels},fn h,{nextlevel,levels}->
-            levels[h] && {nextlevel,levels} || {nextlevel+1,Dict.put(levels,h,nextlevel)}
-          end)
-        []->acc 
-      end
-      {[{level,commit}],acc}
-    end)
-  end
-
-  defp parent_list(%{parent: parents}) when is_list(parents), do: Enum.reverse(parents)
-  defp parent_list(%{parent: parent}), do: [parent]
-  defp parent_list(_), do: []
-
-  defp refpath(:head), do: "HEAD"
-  defp refpath({:branch,ref}), do: "refs/heads/#{ref}"
-  defp refpath({:tag,ref}), do: "refs/tags/#{ref}"
-  defp refpath({:remote,remote,:head}), do: "refs/remotes/#{remote}/HEAD"
-  defp refpath({:remote,remote,ref}), do: "refs/remotes/#{remote}/#{ref}"
-
-  defp fuzzy_ref(repo,ref) when is_atom(ref) or is_tuple(ref), do:
-    Git.Backend.resolve_ref(repo,refpath(ref))
-  defp fuzzy_ref(repo,ref) when is_binary(ref) do
-    Git.Backend.resolve_ref(repo,refpath({:branch,ref}))
-    || Git.Backend.resolve_ref(repo,refpath({:tag,ref}))
-    || case String.split(ref,"/") do
-         [remote,ref]->Git.Backend.resolve_ref(repo,refpath({:remote,remote,ref}))
-         [remote]->Git.Backend.resolve_ref(repo,refpath({:remote,remote,:head}))
-       end
-    || ref
-  end
-
-  defp get_path(repo,%{tree: tree},path), do: get_path(repo,object(repo,tree),path)
-  defp get_path(repo,%{object: ref},path), do: get_path(repo,object(repo,ref),path)
-  defp get_path(_repo,obj,"/"), do: obj
-  defp get_path(repo,tree,path) when is_list(tree) do
-    {name,subpath} = case String.split(String.strip(path,?/),"/", parts: 2) do
-        [head,tail] -> {head,tail}
-        [head] -> {head,nil}
-    end
-    if (elem=Enum.find(tree,& &1.name == name)) do
-      obj = object(repo,elem.ref)
-      if subpath, do: get_path(repo,obj,subpath), else: obj
-    end
-  end
-  defp get_path(_,_,_), do: nil
-end
-
-defmodule Git.RefImpl do
+defmodule Gitex.Git do
   defstruct home_dir: ".git"
 
   @moduledoc """
-    reference implementation of `Git.Codec` and `Git.Backend`
+    reference implementation of `Gitex.Codec` and `Gitex.Backend`
     for the standard git object storage on disk
   """
 
@@ -132,11 +13,11 @@ defmodule Git.RefImpl do
   def new(path) do
     gitdir = "#{path}/.git"
     if File.exists?(gitdir), 
-      do: %Git.RefImpl{home_dir: gitdir}, 
+      do: %Gitex.Git{home_dir: gitdir}, 
       else: new(Path.dirname(path))
   end
 
-  defimpl Git.Codec, for: Git.RefImpl do
+  defimpl Gitex.Codec, for: Gitex.Git do
     def parse_obj(bin,hash) do
       [metadatas,message] = String.split(bin,"\n\n",parts: 2)
       String.split(metadatas,"\n") |> Enum.map(fn metadata->
@@ -174,13 +55,12 @@ defmodule Git.RefImpl do
     def decode(_repo,_hash,{:blob,bin}), do: bin
   end
   
-  defimpl Git.Backend, for: Git.RefImpl do
+  defimpl Gitex.Backend, for: Gitex.Git do
     import Bitwise
     def read(repo,path), do: File.read("#{repo.home_dir}/#{path}")
     def read!(repo,path), do: File.read!("#{repo.home_dir}/#{path}")
 
     def get_obj(repo,<<first::binary-size(2)>> <> rest=hash) do
-      IO.puts("get obj #{hash}")
       case read(repo,"objects/#{first}/#{rest}") do
         {:ok,v}->[header,content] = v |> :zlib.uncompress |> String.split(<<0>>,parts: 2)
           [type,_] = String.split(header," ",parts: 2)
@@ -230,7 +110,6 @@ defmodule Git.RefImpl do
               <<1::size(1),offset_index::size(31)>>->
                 hashtable_get(large_offsets,offset_index,8)
             end
-            IO.puts("offset for #{Base.encode16 hash}: #{offset}")
             {"#{String.slice(idx_path,0..-5)}.pack",offset}
         end
       end)
@@ -252,19 +131,15 @@ defmodule Git.RefImpl do
         <<msb::size(1),size::size(7)>>,{type,acc,shift}->
           {msb==0 && :halt || :cont,{type,acc+(size<<<shift),shift+7}}
       end)
-      IO.puts("len : #{len}")
       case elem(@types,type) do
         :ofs_delta-> {:halted,{delta_offset,offlen}} = Enumerable.reduce(IO.binstream(pack,1),{:cont,:first},fn 
             <<msb::size(1),size::size(7)>>,:first-> {msb==0 && :halt || :cont,{size,7}}
             <<msb::size(1),size::size(7)>>,{acc,offlen}->{msb==0 && :halt || :cont,{(acc<<<7)+size,offlen+7}}
           end)
-          IO.puts("ofs_delta")
-          #<<delta_offset::size(offlen)>> = off_bs
           delta_offset=delta_offset + Enum.reduce(0..div(offlen,7)-1,-1,& &2 + (1<<<(&1*7)))
           delta = :zlib.uncompress(IO.binread(pack,:all))#len))
           packed_apply_delta(packed_read(repo,{pack,offset-delta_offset}),delta)
         :ref_delta-> 
-          IO.puts("ref_delta")
           <<hash::binary-size(20)>> <> content = to_string(IO.binread(pack,:all))#len+20))
           delta = content
           packed_apply_delta(get_obj(repo,Base.encode16(hash,case: :lower)),delta)
@@ -288,20 +163,12 @@ defmodule Git.RefImpl do
     defp apply_delta_hunks(acc,base,<<0::size(1),add_len::size(7),add::binary-size(add_len)>> <> delta,res_size,acc_size), do:
       apply_delta_hunks([acc,add],base,delta,res_size,acc_size+add_len)
     defp apply_delta_hunks(acc,base,<<1::size(1),len_shift::bitstring-size(3),off_shift::bitstring-size(4)>> <> delta,res_size,acc_size) do
-      off_ops = 3..0 |> Enum.map(& &1*8) |> Enum.zip(for(<<x::size(1)<-off_shift>>,do: x)) |> Enum.filter_map(& elem(&1,1)==1,& elem(&1,0))
-      len_ops = 2..0 |> Enum.map(& &1*8) |> Enum.zip(for(<<x::size(1)<-len_shift>>,do: x)) |> Enum.filter_map(& elem(&1,1)==1,& elem(&1,0))
+      off_ops = Enum.zip([0,8,16,24],Enum.reverse(for(<<x::size(1)<-off_shift>>,do: x))) |> Enum.filter_map(& elem(&1,1)==1,& elem(&1,0))
+      len_ops = Enum.zip([0,8,16],Enum.reverse(for(<<x::size(1)<-len_shift>>,do: x))) |> Enum.filter_map(& elem(&1,1)==1,& elem(&1,0))
       {off,delta}=Enum.reduce(off_ops,{0,delta},fn shift,{off,<<byte>><>delta}-> {off ||| (byte<<<shift),delta} end)
       {len,delta}=Enum.reduce(len_ops,{0,delta},fn shift,{off,<<byte>><>delta}-> {off ||| (byte<<<shift),delta} end)
       len = (len==0) && 0x10000 || len
-      IO.puts(inspect(acc))
       apply_delta_hunks([acc,binary_part(base,off,len)],base,delta,res_size,acc_size+len)
     end
   end
 end
-
-Git.history(Git.RefImpl.new,"master") 
-|> Enum.at(2)
-#|> Enum.map(&"#{&1.hash}: #{&1.message}")
-#Git.history(Git.RefImpl.new,"master") |> Git.align
-#|> Enum.map(fn {level,c}->"#{level}: #{c.hash}: #{c.message}" end)
-#Git.history(repo,"master") 

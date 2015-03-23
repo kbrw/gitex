@@ -1,8 +1,8 @@
-defmodule Gitomex.Mixfile do
+defmodule Gitex.Mixfile do
   use Mix.Project
 
   def project do
-    [app: :gitomex,
+    [app: :gitex,
      version: "0.0.1",
      elixir: "~> 1.0",
      deps: deps]
