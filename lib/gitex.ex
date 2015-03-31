@@ -11,6 +11,7 @@ defmodule Gitex do
   """
 
   @doc "get the decoded GIT object associated with a given hash"
+  def object(nil,_repo), do: nil
   def object(hash,repo), do:
     Gitex.Repo.decode(repo,hash,Gitex.Repo.get_obj(repo,hash))
 
@@ -27,16 +28,19 @@ defmodule Gitex do
     either a `ref` or a binary which will be tested for
     each reference type in this order : branch,tag,remote
   """
-  def get(ref,repo), do:
-    object(fuzzy_ref(ref,repo),repo)
+  def get(ref,repo), do: object(get_hash(ref,repo),repo)
+  def get(ref,repo,path), do: object(get_hash(ref,repo,path),repo)
+
+  def get_hash(ref,repo), do: fuzzy_ref(ref,repo)
 
   @doc "from a reference, use a path to get the wanted object"
-  def get(%{tree: tree},repo,path), do: get(object(tree,repo),repo,path)
-  def get(%{object: ref},repo,path), do: get(object(ref,repo),repo,path)
-  def get(tree,repo,path) when is_list(tree), do: 
-    get_path(tree,repo,path |> String.strip(?/) |>  String.split("/"))
-  def get(ref,repo,path), do: 
-    get(get(ref,repo),repo,path)
+  def get_hash(%{tree: tree},repo,path), do: get_hash(tree,object(tree,repo),repo,path)
+  def get_hash(%{object: ref},repo,path), do: get_hash(object(ref,repo),repo,path)
+  def get_hash(tree,repo,path) when is_list(tree), do: get_hash(nil,tree,repo,path)
+  def get_hash(ref,repo,path), do: get_hash(get(ref,repo),repo,path)
+
+  def get_hash(hash,tree,repo,path), do: 
+    get_hash_path(hash,tree,repo,path |> String.strip(?/) |>  String.split("/"))
    
   @doc "from a reference, use a path to put the wanted element"
   def put(%{tree: tree},repo,path,elem), do: put(repo,object(tree,repo),path,elem)
@@ -45,6 +49,17 @@ defmodule Gitex do
     put_path(tree,repo,path |> String.strip(?/) |>  String.split("/"),elem)
   def put(ref,repo,path,elem), do: 
     put(get(ref,repo),repo,path,elem)
+
+  def commit(tree_hash,repo,message,params), do:
+    save_object(params |> Enum.into(%{tree: tree_hash, message: message}),repo)
+
+  def tag(commit_hash,repo,tag) when is_binary(tag), do:
+    (Gitex.Repo.put_ref(repo,refpath({:tag,tag}),commit_hash); commit_hash)
+  def tag(commit_hash,repo,tag,message,params \\ []), do:
+    tag(save_object(params |> Enum.into(%{object: commit_hash,message: message}),repo),repo,tag)
+
+  def branch(commit_hash,repo,branch), do:
+    (Gitex.Repo.put_ref(repo,refpath({:branch,branch}),commit_hash); commit_hash)
 
   @doc "lazily stream parents of a reference, sorted by date"
   def history(repo,ref) do
@@ -101,16 +116,19 @@ defmodule Gitex do
     || ref
   end
 
-  defp get_path(tree,_repo,[]), do: tree
-  defp get_path(tree,_repo,[""]), do: tree
-  defp get_path(tree,repo,[name|subpath]) do
+  defp get_hash_path(hash,_tree,_repo,[]), do: hash
+  defp get_hash_path(hash,_tree,_repo,[""]), do: hash
+  defp get_hash_path(nil,_tree,_repo,[]), do: nil 
+  defp get_hash_path(_hash,tree,repo,[name|subpath]) when is_list(tree) do
     if (elem=Enum.find(tree,& &1.name == name)), do:
-      get_path(object(elem.ref,repo),repo,subpath)
+      get_hash_path(elem.ref,object(elem.ref,repo),repo,subpath)
   end
+  defp get_hash_path(_,_,_,_), do: nil 
 
   defp put_path(elem,repo,_,[]), do: save_object(elem,repo)
   defp put_path(elem,repo,tree,[name|path]) do
-    ref = put_path(repo,get_path(tree,repo,[name]) || [],path,elem)
+    childtree = if (e=Enum.find(tree,& &1.name==name and &1.type==:dir)), do: object(e.ref,repo), else: []
+    ref = put_path(repo,childtree,path,elem)
     {type,mode} = case elem do o when is_list(o)->{:dir,"40000"}; _->{:file,"00777"} end
     save_object([%{name: name, mode: mode, type: type, ref: ref}|Enum.reject(tree, & &1.name == name)],repo)
   end
