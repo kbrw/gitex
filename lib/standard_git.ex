@@ -1,4 +1,3 @@
-
 defmodule Gitex.Git do
   defstruct home_dir: ".git"
 
@@ -17,7 +16,8 @@ defmodule Gitex.Git do
       else: new(Path.dirname(path))
   end
 
-  defimpl Gitex.Codec, for: Gitex.Git do
+  defimpl Gitex.Repo, for: Gitex.Git do
+    import Bitwise
     def parse_obj(bin,hash) do
       [metadatas,message] = String.split(bin,"\n\n",parts: 2)
       String.split(metadatas,"\n") |> Enum.map(fn metadata->
@@ -53,10 +53,7 @@ defmodule Gitex.Git do
     def decode(_repo,hash,{type,bin}) when type in [:commit,:tag], do: parse_obj(bin,hash)
     def decode(_repo,_hash,{:tree,bin}), do: parse_tree(bin)
     def decode(_repo,_hash,{:blob,bin}), do: bin
-  end
-  
-  defimpl Gitex.Backend, for: Gitex.Git do
-    import Bitwise
+
     def read(repo,path), do: File.read("#{repo.home_dir}/#{path}")
     def read!(repo,path), do: File.read!("#{repo.home_dir}/#{path}")
 
@@ -119,7 +116,7 @@ defmodule Gitex.Git do
 
     @types {nil,:commit,:tree,:blob,:tag,nil,:ofs_delta,:ref_delta}
     def packed_read(repo,{pack_file,offset}) when is_binary(pack_file) do
-      fd = File.open!(pack_file,[:raw])
+      fd = File.open!(pack_file,[:raw, read_ahead: 500_000])
       res = packed_read(repo,{fd,offset})
       File.close(fd); res
     end
@@ -140,7 +137,7 @@ defmodule Gitex.Git do
           delta = :zlib.uncompress(IO.binread(pack,:all))#len))
           packed_apply_delta(packed_read(repo,{pack,offset-delta_offset}),delta)
         :ref_delta-> 
-          <<hash::binary-size(20)>> <> content = to_string(IO.binread(pack,:all))#len+20))
+          <<hash::binary-size(20)>> <> content = to_string(IO.binread(pack,:all))
           delta = content
           packed_apply_delta(get_obj(repo,Base.encode16(hash,case: :lower)),delta)
         type-> 
@@ -160,8 +157,9 @@ defmodule Gitex.Git do
     end
 
     defp apply_delta_hunks(acc,_,_,res_size,acc_size) when acc_size >= res_size, do: IO.iodata_to_binary(acc)
-    defp apply_delta_hunks(acc,base,<<0::size(1),add_len::size(7),add::binary-size(add_len)>> <> delta,res_size,acc_size), do:
+    defp apply_delta_hunks(acc,base,<<0::size(1),add_len::size(7),add::binary-size(add_len)>> <> delta,res_size,acc_size) do
       apply_delta_hunks([acc,add],base,delta,res_size,acc_size+add_len)
+    end
     defp apply_delta_hunks(acc,base,<<1::size(1),len_shift::bitstring-size(3),off_shift::bitstring-size(4)>> <> delta,res_size,acc_size) do
       off_ops = Enum.zip([0,8,16,24],Enum.reverse(for(<<x::size(1)<-off_shift>>,do: x))) |> Enum.filter_map(& elem(&1,1)==1,& elem(&1,0))
       len_ops = Enum.zip([0,8,16],Enum.reverse(for(<<x::size(1)<-len_shift>>,do: x))) |> Enum.filter_map(& elem(&1,1)==1,& elem(&1,0))

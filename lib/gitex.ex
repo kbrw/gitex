@@ -7,12 +7,12 @@ defmodule Gitex do
   @type ref :: :head | tag | branch | remote
 
   @moduledoc """
-    Git API to a repo which is a struct implementing Gitex.Codec and Gitex.Backend
+    Git API to a repo which is a struct implementing Gitex.Repo
   """
 
   @doc "get the decoded GIT object associated with a given hash"
   def object(repo,hash), do:
-    Gitex.Codec.decode(repo,hash,Gitex.Backend.get_obj(repo,hash))
+    Gitex.Repo.decode(repo,hash,Gitex.Repo.get_obj(repo,hash))
      
   @doc """
     get the decoded GIT object from a fuzzy reference : can be
@@ -72,13 +72,13 @@ defmodule Gitex do
   defp refpath({:remote,remote,ref}), do: "refs/remotes/#{remote}/#{ref}"
 
   defp fuzzy_ref(repo,ref) when is_atom(ref) or is_tuple(ref), do:
-    Gitex.Backend.resolve_ref(repo,refpath(ref))
+    Gitex.Repo.resolve_ref(repo,refpath(ref))
   defp fuzzy_ref(repo,ref) when is_binary(ref) do
-    Gitex.Backend.resolve_ref(repo,refpath({:branch,ref}))
-    || Gitex.Backend.resolve_ref(repo,refpath({:tag,ref}))
+    Gitex.Repo.resolve_ref(repo,refpath({:branch,ref}))
+    || Gitex.Repo.resolve_ref(repo,refpath({:tag,ref}))
     || case String.split(ref,"/") do
-         [remote,ref]->Gitex.Backend.resolve_ref(repo,refpath({:remote,remote,ref}))
-         [remote]->Gitex.Backend.resolve_ref(repo,refpath({:remote,remote,:head}))
+         [remote,ref]->Gitex.Repo.resolve_ref(repo,refpath({:remote,remote,ref}))
+         [remote]->Gitex.Repo.resolve_ref(repo,refpath({:remote,remote,:head}))
        end
     || ref
   end

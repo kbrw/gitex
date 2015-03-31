@@ -3,7 +3,7 @@ Gitex
 
 - Reference implementation in pure Elixir of the Git object model and storage,
   including optimized pack-refs and pack-objects (the storage is optimal, not this implementation :-) ).
-- Protocols over Git codec and backend to customize them and reuse the same
+- Protocol over Git codec and backend to customize them and reuse the same
   versioning logic in a completely different environment and use case: JSON
   into Riak for instance.
 
