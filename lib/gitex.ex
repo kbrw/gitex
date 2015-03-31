@@ -11,29 +11,47 @@ defmodule Gitex do
   """
 
   @doc "get the decoded GIT object associated with a given hash"
-  def object(repo,hash), do:
+  def object(hash,repo), do:
     Gitex.Repo.decode(repo,hash,Gitex.Repo.get_obj(repo,hash))
+
+  @doc "save the GIT object and return the created hash"
+  def save_object(elem,repo) do
+    bin = Gitex.Repo.encode(elem)
+    hash = :crypto.hash(:sha,bin) |> Base.encode16(case: :lower)
+    Gitex.Repo.put_obj(repo,hash,bin)
+    hash
+  end
      
   @doc """
     get the decoded GIT object from a fuzzy reference : can be
     either a `ref` or a binary which will be tested for
     each reference type in this order : branch,tag,remote
   """
-  def get(repo,ref), do:
-    object(repo,fuzzy_ref(repo,ref))
+  def get(ref,repo), do:
+    object(fuzzy_ref(ref,repo),repo)
 
   @doc "from a reference, use a path to get the wanted object"
-  def get(repo,%{}=obj,path) , do: 
-    get_path(repo,obj,path)
-  def get(repo,ref,path), do: 
-    get_path(repo,get(repo,ref),path)
+  def get(%{tree: tree},repo,path), do: get(object(tree,repo),repo,path)
+  def get(%{object: ref},repo,path), do: get(object(ref,repo),repo,path)
+  def get(tree,repo,path) when is_list(tree), do: 
+    get_path(tree,repo,path |> String.strip(?/) |>  String.split("/"))
+  def get(ref,repo,path), do: 
+    get(get(ref,repo),repo,path)
+   
+  @doc "from a reference, use a path to put the wanted element"
+  def put(%{tree: tree},repo,path,elem), do: put(repo,object(tree,repo),path,elem)
+  def put(%{object: ref},repo,path,elem), do: put(repo,object(ref,repo),path,elem)
+  def put(tree,repo,path,elem) when is_list(tree), do: 
+    put_path(tree,repo,path |> String.strip(?/) |>  String.split("/"),elem)
+  def put(ref,repo,path,elem), do: 
+    put(get(ref,repo),repo,path,elem)
 
   @doc "lazily stream parents of a reference, sorted by date"
   def history(repo,ref) do
-    Stream.resource(fn-> {object(repo,fuzzy_ref(repo,ref)),[]} end,fn
+    Stream.resource(fn-> {object(fuzzy_ref(ref,repo),repo),[]} end,fn
       :nomore->{:halt,nil}
       {current,others}->
-        to_compare = Enum.concat(Enum.map(parent_list(current),&object(repo,&1)) ,others)
+        to_compare = Enum.concat(Enum.map(parent_list(current),&object(&1,repo)) ,others)
         nexts = to_compare |> Enum.uniq(& &1.hash) |> Enum.sort_by(& &1.committer.utc_time) |> Enum.reverse
         case nexts do
           [next|others]-> {[current],{next,others}}
@@ -71,9 +89,9 @@ defmodule Gitex do
   defp refpath({:remote,remote,:head}), do: "refs/remotes/#{remote}/HEAD"
   defp refpath({:remote,remote,ref}), do: "refs/remotes/#{remote}/#{ref}"
 
-  defp fuzzy_ref(repo,ref) when is_atom(ref) or is_tuple(ref), do:
+  defp fuzzy_ref(ref,repo) when is_atom(ref) or is_tuple(ref), do:
     Gitex.Repo.resolve_ref(repo,refpath(ref))
-  defp fuzzy_ref(repo,ref) when is_binary(ref) do
+  defp fuzzy_ref(ref,repo) when is_binary(ref) do
     Gitex.Repo.resolve_ref(repo,refpath({:branch,ref}))
     || Gitex.Repo.resolve_ref(repo,refpath({:tag,ref}))
     || case String.split(ref,"/") do
@@ -83,18 +101,17 @@ defmodule Gitex do
     || ref
   end
 
-  defp get_path(repo,%{tree: tree},path), do: get_path(repo,object(repo,tree),path)
-  defp get_path(repo,%{object: ref},path), do: get_path(repo,object(repo,ref),path)
-  defp get_path(_repo,obj,"/"), do: obj
-  defp get_path(repo,tree,path) when is_list(tree) do
-    {name,subpath} = case String.split(String.strip(path,?/),"/", parts: 2) do
-        [head,tail] -> {head,tail}
-        [head] -> {head,nil}
-    end
-    if (elem=Enum.find(tree,& &1.name == name)) do
-      obj = object(repo,elem.ref)
-      if subpath, do: get_path(repo,obj,subpath), else: obj
-    end
+  defp get_path(tree,_repo,[]), do: tree
+  defp get_path(tree,_repo,[""]), do: tree
+  defp get_path(tree,repo,[name|subpath]) do
+    if (elem=Enum.find(tree,& &1.name == name)), do:
+      get_path(object(elem.ref,repo),repo,subpath)
   end
-  defp get_path(_,_,_), do: nil
+
+  defp put_path(elem,repo,_,[]), do: save_object(elem,repo)
+  defp put_path(elem,repo,tree,[name|path]) do
+    ref = put_path(repo,get_path(tree,repo,[name]) || [],path,elem)
+    {type,mode} = case elem do o when is_list(o)->{:dir,"40000"}; _->{:file,"00777"} end
+    save_object([%{name: name, mode: mode, type: type, ref: ref}|Enum.reject(tree, & &1.name == name)],repo)
+  end
 end
