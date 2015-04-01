@@ -62,7 +62,7 @@ defmodule Gitex do
   - `branches` hashes will be commit parents, and these branches specs will be updated after commit
   - committer and author are taken from `Gitex.Repo.user` or `Application.get_env(:gitex,:anonymous_user)` if `nil`
   """
-  @spec put(Gitex.Repo.hash,Gitex.Repo.t,[branch::binary]|branch::binary,binary) :: Gitex.Repo.hash
+  @spec commit(Gitex.Repo.hash,Gitex.Repo.t,[branch::binary]|branch::binary,binary) :: Gitex.Repo.hash
   def commit(tree_hash,repo,branches,message) when is_list(branches) do
     committer = author = user_now(repo)
     parents = Enum.map(branches,&Gitex.Repo.resolve_ref(repo,refpath({:branch,&1}))) |> Enum.filter(&!is_nil(&1))
