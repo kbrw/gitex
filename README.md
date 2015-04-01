@@ -2,43 +2,45 @@ Gitex
 =======
 
 - Reference implementation in pure Elixir of the Git object model and storage,
-  including optimized pack-refs and pack-objects (the storage is optimal, not this implementation :-) ).
+  including optimized pack-refs and pack-objects/deltas).
 - Protocol over Git codec and backend to customize them and reuse the same
   versioning logic in a completely different environment and use case: JSON
   into Riak for instance.
 
-TODO (DO NOT USE IT SERIOUSLY YET):
+TODO:
 
-- test it
-- add a cache logic with an ETS LRU cache 
-- write commit implementation, currently read-only
-- add some useful alternative implementations, currently only standard object
-  encoding and storage
+- test it (only for regression, currently it works on many open source git repo, so it can be considered as tested)
+- add impl `Gitex.Repo` for Pid as a GenServer RPC
+- implementation example of previous GenServer maintaining ETS LRU cache of standard git fs objects and deltas
+- add some useful alternative implementations, currently only standard object encoding and storage
 
 ## Usage
 
-The main API consists in 2 functions:
+- `Gitex.get_hash` allows you to look for an object and return its hash
+- `Gitex.object` to retrieve a git object from its hash
+- `Gitex.get` is `Gitex.get_hash |> Gitex.object`
 
-- `Gitex.get` allows you to get "something" on git with a high level logic :
-  fuzzy reference and path to select dir or file.
-- `Gitex.history` gives you a lazy stream to go through the commit history graph from
-  a reference by date
+- `Gitex.history` gives you a lazy stream to go through the commit history graph from a reference by date
+
+- `Gitex.save_object` to save a git object
+- `Gitex.put` to put a blob/tree at a given path: save the new trees and return the root tree hash
+- `Gitex.commit`, given a tree hash and parent branches : save a new commit and update corresponding branches refs.
+- `Gitex.tag`, given an object hash, and a name, create a tag referencing this hash
 
 ```elixir
-repo = Gitex.Git.new
-Gitex.get(repo,"master") #get commit
-Gitex.get(repo,"myannotatedtag") #get tag object
-Gitex.get(repo,"master","/path/to/dir")  #get tree object
-Gitex.get(repo,"master","/path/to/file") #get blob
+repo = Gitex.Git.open #Gitex.Git is the .git fs object storage
+Gitex.get("master",repo) #get commit
+Gitex.get("myannotatedtag",repo) #get tag object
+Gitex.get("master",repo,"/path/to/dir")  #get tree object
+Gitex.get("master",repo,"/path/to/file") #get blob
 
 # get all commits from master to 1st January 2015
 Gitex.history(repo,"master") |> Enum.take_while(& &1.committer.utc_time > {{2015,1,1},{0,0,0}})
-```
 
-The low level API is a function to get an object from a hash : `Gitex.object`
+# get the stream of version history of a given file
+Gitex.history(repo,"master") |> Stream.map(&Gitex.get_hash(&1,repo,"/path/to/file")) |> Stream.uniq |> Stream.map(&Gitex.object(&1,repo))
 
-```elixir
-Gitex.object("abbabef2512234112311923874")
+# commit history stream is powerful, play with it
 ```
 
 A nice function `Gitex.align_history` allows you to lazily add an index number to your
@@ -47,3 +49,8 @@ history stream in order to construct a pretty visualizer very easily (d3.js for 
 ```elixir
 Gitex.history(repo,:head) |> Gitex.align_history
 ```
+
+## The Gitex.Repo protocol
+
+Any repo implementing the `Gitex.Repo` protocol : (basically object codec, ref
+setter/resolver, binary get/put) can be managed with the `Gitex` API.

@@ -11,7 +11,8 @@ defmodule Gitex.Mixfile do
   end
 
   def application do
-    [applications: [:logger]]
+    [applications: [:logger],
+     env: [anonymous_user: %{name: "anonymous", email: "anonymous@localhost"}]]
   end
 
   defp package do

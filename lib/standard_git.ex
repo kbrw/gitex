@@ -1,5 +1,5 @@
 defmodule Gitex.Git do
-  defstruct home_dir: ".git"
+  defstruct home_dir: ".git", user: nil
 
   @moduledoc """
     reference implementation of `Gitex.Codec` and `Gitex.Backend`
@@ -7,17 +7,58 @@ defmodule Gitex.Git do
   """
 
   @doc "Standard GIT repo : recursively find .git directory"
-  def new, do: new(System.cwd!)
-  def new("/"), do: nil
-  def new(path) do
+  def open, do: open(System.cwd!)
+  def open("/"), do: nil
+  def open(path) do
     gitdir = "#{path}/.git"
     if File.exists?(gitdir), 
       do: %Gitex.Git{home_dir: gitdir}, 
-      else: new(Path.dirname(path))
+      else: open(Path.dirname(path))
   end
 
   defimpl Gitex.Repo, for: Gitex.Git do
     import Bitwise
+
+    def user(%{user: user}), do: user
+  
+    def decode(_repo,hash,{type,bin}) when type in [:commit,:tag], do: parse_obj(bin,hash)
+    def decode(_repo,_hash,{:tree,bin}), do: parse_tree(bin)
+    def decode(_repo,_hash,{:blob,bin}), do: bin
+
+    def encode(_repo,tree) when is_list(tree), do: encode_tree(tree)
+    def encode(_repo,blob) when is_binary(blob), do: blob
+    def encode(_repo,%{}=obj), do: encode_obj(obj)
+
+    def get_obj(repo,<<first::binary-size(2)>> <> rest=hash) do
+      case read(repo,"objects/#{first}/#{rest}") do
+        {:ok,v}->[header,content] = v |> :zlib.uncompress |> String.split(<<0>>,parts: 2)
+          [type,_] = String.split(header," ",parts: 2)
+          {:"#{type}",content}
+        {:error,:enoent}-> 
+          (delta_offset=packed_offset(repo,hash)) && packed_read(repo,delta_offset)
+      end
+    end
+
+    def put_obj(repo,{type,bin}) do
+      bin_to_hash = "#{type} #{byte_size(bin)}\0#{bin}"
+      <<first::binary-size(2)>><>rest=hash = :crypto.hash(:sha,bin_to_hash) |> Base.encode16(case: :lower)
+      dir = "#{repo.home_dir}/objects/#{first}"; path= "#{dir}/#{rest}"
+      if !File.exists?(dir), do: File.mkdir_p!(dir)
+      if !File.exists?(path), do: File.write!(path,:zlib.compress(bin_to_hash))
+      hash
+    end
+  
+    def resolve_ref(repo,"HEAD"), do: 
+      raw_ref(repo,read!(repo,"HEAD") |> String.rstrip(?\n))
+    def resolve_ref(repo,refpath), do:
+      (nilify(read(repo,refpath)) || packed_resolve_ref(nilify(read(repo,"packed-refs")),refpath))
+
+    def set_ref(repo,refpath,hash), do:
+      File.write!("#{repo.home_dir}/#{refpath}","#{hash}\n")
+
+    defp read(repo,path), do: File.read("#{repo.home_dir}/#{path}")
+    defp read!(repo,path), do: File.read!("#{repo.home_dir}/#{path}")
+
     defp parse_obj(bin,hash) do
       [metadatas,message] = String.split(bin,"\n\n",parts: 2)
       String.split(metadatas,"\n") |> Enum.map(fn metadata->
@@ -31,6 +72,14 @@ defmodule Gitex.Git do
       |> Dict.put(:hash,hash)
     end
 
+    @field_order %{tree: 0, parent: 1, author: 2, committer: 3, object: 4, type: 5, tag: 6, tagger: 7}
+    defp encode_obj(%{message: message}=obj) do
+      metas = Dict.drop(obj,[:message,:hash])
+        |> Enum.sort_by(fn {k,_}->@field_order[k] end)
+        |> Enum.map(fn {k,v}->encode_meta("#{k}",v) end)
+      IO.iodata_to_binary([metas,?\n,message])
+    end
+
     @gregorian1970 :calendar.datetime_to_gregorian_seconds({{1970,1,1},{0,0,0}})
     defp parse_meta(k,v) when k in [:committer,:author,:tagger] do
       todate=&:calendar.gregorian_seconds_to_datetime/1; toi=&String.to_integer/1
@@ -39,7 +88,19 @@ defmodule Gitex.Git do
       local_time = utc_time + toi.("#{tz_sign}1")*(3600*toi.(tz_h) + 60*toi.(tz_min))
       %{name: name,email: email,local_time: todate.(local_time), utc_time: todate.(utc_time)}
     end
+    defp parse_meta(:type,v), do: :"#{v}"
     defp parse_meta(_,v), do: v
+
+    defp encode_meta(_k,[]), do: []
+    defp encode_meta(k,[v|rest]), do: [encode_meta(k,v),encode_meta(k,rest)]
+    defp encode_meta(k,%{name: name,email: email, local_time: local_time, utc_time: utc_time}) do
+      utc = :calendar.datetime_to_gregorian_seconds(utc_time)
+      offset = :calendar.datetime_to_gregorian_seconds(local_time)-utc
+      {sign,{delta_h,delta_m,_}}={if(offset>0,do: ?+,else: ?-),:calendar.seconds_to_time(abs(offset))}
+      [k,?\s,name,?\s,?<,email,?>,?\s,"#{utc-@gregorian1970}",?\s,sign,String.rjust("#{delta_h}",2,?0),String.rjust("#{delta_m}",2,?0),?\n]
+    end
+    defp encode_meta(k,v) when is_atom(v), do: encode_meta(k,"#{v}")
+    defp encode_meta(k,v), do: [k,?\s,v,?\n]
   
     defp parse_tree(""), do: []
     defp parse_tree(bin) do
@@ -49,28 +110,14 @@ defmodule Gitex.Git do
       ref = Base.encode16(ref,case: :lower)
       [%{name: name,mode: mode, type: type, ref: ref}|parse_tree(rest)]
     end
-  
-    def decode(_repo,hash,{type,bin}) when type in [:commit,:tag], do: parse_obj(bin,hash)
-    def decode(_repo,_hash,{:tree,bin}), do: parse_tree(bin)
-    def decode(_repo,_hash,{:blob,bin}), do: bin
 
-    defp read(repo,path), do: File.read("#{repo.home_dir}/#{path}")
-    defp read!(repo,path), do: File.read!("#{repo.home_dir}/#{path}")
-
-    def get_obj(repo,<<first::binary-size(2)>> <> rest=hash) do
-      case read(repo,"objects/#{first}/#{rest}") do
-        {:ok,v}->[header,content] = v |> :zlib.uncompress |> String.split(<<0>>,parts: 2)
-          [type,_] = String.split(header," ",parts: 2)
-          {:"#{type}",content}
-        {:error,:enoent}-> 
-          (delta_offset=packed_offset(repo,hash)) && packed_read(repo,delta_offset)
-      end
+    defp encode_tree(tree) do
+      Enum.sort_by(tree,fn %{type: :dir,name: n}-> n<>"/"; %{name: n}->n end)
+      |> Enum.map(fn %{type: type,ref: ref, mode: mode, name: name}->
+        [if(type==:file, do: ?1, else: []),mode,?\s,name,0,Base.decode16!(ref,case: :lower)]
+      end)
+      |> IO.iodata_to_binary
     end
-  
-    def resolve_ref(repo,"HEAD"), do: 
-      raw_ref(repo,read!(repo,"HEAD") |> String.rstrip(?\n))
-    def resolve_ref(repo,refpath), do:
-      (nilify(read(repo,refpath)) || packed_resolve_ref(nilify(read(repo,"packed-refs")),refpath))
 
     defp raw_ref(repo,"ref: "<>ref), do: nilify(read(repo,ref))
     defp raw_ref(_,ref), do: ref

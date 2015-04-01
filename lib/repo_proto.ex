@@ -17,6 +17,15 @@ defprotocol Gitex.Repo do
   @spec resolve_ref(t,refpath) :: hash
   def resolve_ref(repo,ref)
 
-  @spec get_obj(t,hash) :: binary
+  @spec set_ref(t,refpath,hash) :: :ok
+  def set_ref(repo,ref,hash)
+
+  @spec get_obj(t,hash) :: {type,binary}
   def get_obj(repo,hash)
+
+  @spec put_obj(t,{type,binary}) :: hash
+  def put_obj(repo,bintype)
+
+  @spec user(t):: nil | %{name: binary,email: binary}
+  def user(repo)
 end
