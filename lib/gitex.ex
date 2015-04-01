@@ -27,7 +27,7 @@ defmodule Gitex do
   def get(ref,repo), do: object(get_hash(ref,repo),repo)
   def get(ref,repo,path), do: object(get_hash(ref,repo,path),repo)
 
-  def get_hash(%{hash: hash},repo), do: hash
+  def get_hash(%{hash: hash},_repo), do: hash
   def get_hash(ref,repo), do: fuzzy_ref(ref,repo)
 
   @doc "from a reference, use a path to get the wanted object"
