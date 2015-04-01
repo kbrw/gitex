@@ -10,6 +10,7 @@ Gitex
 TODO:
 
 - test it (only for regression, currently it works on many open source git repo, so it can be considered as tested)
+- add a `Gitex.merge` helper to help you construct
 - add impl `Gitex.Repo` for Pid as a GenServer RPC
 - implementation example of previous GenServer maintaining ETS LRU cache of standard git fs objects and deltas
 - add some useful alternative implementations, currently only standard object encoding and storage
@@ -47,9 +48,13 @@ Gitex.history(repo,"master")
 # commit history stream is powerful, play with it
 
 Gitex.get("master",repo) # return commit
-|> Gitex.put(r,"/some/path/file1","file1 content") #return new tree hash
-|> Gitex.put(r,"/some/other/path/file2","file2 content") #return new tree hash
-|> Gitex.commit(r,"master","some commit message") #return commit hash
+|> Gitex.put(r,"/some/path/file1","file1 content") #put new trees and return new root tree hash
+|> Gitex.put(r,"/some/other/path/file2","file2 content") ##put new trees and return new root tree hash
+|> Gitex.commit(r,"master","some commit message") #save tree in a commit with "master" parent then update "master" and return commit hash 
+|> Gitex.tag(r,"mytag") # save this commit to a soft tag return commit_tag
+|> Gitex.tag(r,"myannotatedtag","my message") # save this commit to a tag object with comment, return tag hash
+
+# Currently "put" is the only helper to construct a new "tree", for merging you have to construct the tree yourself
 ```
 
 A nice function `Gitex.align_history` allows you to lazily add an index number to your
