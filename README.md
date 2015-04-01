@@ -35,12 +35,21 @@ Gitex.get("master",repo,"/path/to/dir")  #get tree object
 Gitex.get("master",repo,"/path/to/file") #get blob
 
 # get all commits from master to 1st January 2015
-Gitex.history(repo,"master") |> Enum.take_while(& &1.committer.utc_time > {{2015,1,1},{0,0,0}})
+Gitex.history(repo,"master") 
+|> Enum.take_while(& &1.committer.utc_time > {{2015,1,1},{0,0,0}})
 
 # get the stream of version history of a given file
-Gitex.history(repo,"master") |> Stream.map(&Gitex.get_hash(&1,repo,"/path/to/file")) |> Stream.uniq |> Stream.map(&Gitex.object(&1,repo))
+Gitex.history(repo,"master") 
+|> Stream.map(&Gitex.get_hash(&1,repo,"/path/to/file")) 
+|> Stream.uniq 
+|> Stream.map(&Gitex.object(&1,repo))
 
 # commit history stream is powerful, play with it
+
+Gitex.get("master",repo) # return commit
+|> Gitex.put(r,"/some/path/file1","file1 content") #return new tree hash
+|> Gitex.put(r,"/some/other/path/file2","file2 content") #return new tree hash
+|> Gitex.commit(r,"master","some commit message") #return commit hash
 ```
 
 A nice function `Gitex.align_history` allows you to lazily add an index number to your
