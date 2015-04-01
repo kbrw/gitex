@@ -3,11 +3,16 @@ defmodule Gitex.Mixfile do
 
   def project do
     [app: :gitex,
-     version: "0.0.1",
+     version: "0.1.0",
      elixir: "~> 1.0",
+     docs: [
+       readme: "README.md", main: "README",
+       source_url: "https://github.com/awetzel/gitex",
+       source_ref: "master"
+     ],
      package: package,
      description: description,
-     deps: []]
+     deps: [{:ex_doc, only: :dev}]]
   end
 
   def application do

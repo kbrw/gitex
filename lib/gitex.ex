@@ -1,36 +1,39 @@
 defmodule Gitex do
-  @type hash   :: {:hash,String.t}
-  @type refpath:: {:refpath,String.t}
   @type tag    :: {:tag,String.t}
   @type branch :: {:branch,String.t}
   @type remote :: {:remote,remote::String.t,:head | branch::String.t}
   @type ref :: :head | tag | branch | remote
 
   @moduledoc """
-    Git API to a repo which is a struct implementing Gitex.Repo
+    Git API to a repo which is a struct implementing `Gitex.Repo`
   """
 
   @doc "get the decoded GIT object associated with a given hash"
+  @spec object(nil | Gitex.Repo.hash,Gitex.Repo.t) :: Gitex.Repo.gitobj
   def object(nil,_repo), do: nil
   def object(hash,repo), do:
     Gitex.Repo.decode(repo,hash,Gitex.Repo.get_obj(repo,hash))
 
   @doc "save the GIT object and return the created hash"
+  @spec save_object(Gitex.Repo.gitobj,Gitex.Repo.t) :: Gitex.Repo.hash
   def save_object(elem,repo), do:
     Gitex.Repo.put_obj(repo,{typeof(elem),Gitex.Repo.encode(repo,elem)})
      
-  @doc """
-    get the decoded GIT object from a fuzzy reference : can be
-    either a `ref` or a binary which will be tested for
-    each reference type in this order : branch,tag,remote
-  """
+  @doc "basically `get_hash |> object`"
   def get(ref,repo), do: object(get_hash(ref,repo),repo)
   def get(ref,repo,path), do: object(get_hash(ref,repo,path),repo)
 
+  @doc """
+    Get the decoded GIT object hash from a fuzzy
+    reference : can be either a `ref` or a binary which
+    will be tested for each reference type in this order : branch,tag,remote
+  """
+  @spec get_hash((someref::binary) | Gitex.Repo.commit | Gitex.Repo.tag,Gitex.Repo.t) :: Gitex.Repo.hash
   def get_hash(%{hash: hash},_repo), do: hash
   def get_hash(ref,repo), do: fuzzy_ref(ref,repo)
 
-  @doc "from a reference, use a path to get the wanted object"
+  @doc "from a reference, use a path to get the wanted object : tree or blob"
+  @spec get_hash((someref::binary) | Gitex.Repo.commit | Gitex.Repo.tag | Gitex.Repo.tree,Gitex.Repo.t) :: Gitex.Repo.hash
   def get_hash(%{tree: tree},repo,path), do: get_hash(tree,object(tree,repo),repo,path)
   def get_hash(%{object: ref},repo,path), do: get_hash(object(ref,repo),repo,path)
   def get_hash(tree,repo,path) when is_list(tree), do: get_hash(nil,tree,repo,path)
@@ -39,7 +42,12 @@ defmodule Gitex do
   def get_hash(hash,tree,repo,path), do: 
     get_hash_path(hash,tree,repo,path |> String.strip(?/) |>  String.split("/"))
    
-  @doc "from a reference, use a path to put the wanted element"
+  @doc """
+  - from some reference or object, get a root tree to alter
+  - save the missing or changed trees and blob from the root
+  - return the new root tree hash
+  """
+  @spec put((someref::binary) | Gitex.Repo.commit | Gitex.Repo.tag | Gitex.Repo.tree,Gitex.Repo.t,path::binary,elem::Gitex.Repo.blob | Gitex.Repo.tree) :: Gitex.Repo.hash
   def put(%{tree: tree},repo,path,elem), do: put(object(tree,repo),repo,path,elem)
   def put(%{object: ref},repo,path,elem), do: put(object(ref,repo),repo,path,elem)
   def put(tree,repo,path,elem) when is_list(tree), do:
@@ -47,6 +55,14 @@ defmodule Gitex do
   def put(ref,repo,path,elem), do: 
     put(get(ref,repo),repo,path,elem)
 
+  @doc """
+  save a new commit :
+
+  - `tree_hash` is the tree which must be referenced by this commit, use "put" to construct it
+  - `branches` hashes will be commit parents, and these branches specs will be updated after commit
+  - committer and author are taken from `Gitex.Repo.user` or `Application.get_env(:gitex,:anonymous_user)` if `nil`
+  """
+  @spec put(Gitex.Repo.hash,Gitex.Repo.t,[branch::binary]|branch::binary,binary) :: Gitex.Repo.hash
   def commit(tree_hash,repo,branches,message) when is_list(branches) do
     committer = author = user_now(repo)
     parents = Enum.map(branches,&Gitex.Repo.resolve_ref(repo,refpath({:branch,&1}))) |> Enum.filter(&!is_nil(&1))
@@ -56,13 +72,16 @@ defmodule Gitex do
   end
   def commit(tree_hash,repo,branch,message), do: commit(tree_hash,repo,[branch],message)
 
+  @doc "create a new soft tag to reference an object"
   def tag(hash,repo,tag), do: (Gitex.Repo.set_ref(repo,refpath({:tag,tag}),hash); hash)
+  @doc "create an annottated tag to reference an object"
   def tag(hash,repo,tag,message) do
     {type,_} = Gitex.Repo.get_obj(repo,hash)
     tag(save_object(%{tag: tag,type: type,object: hash,message: message,tagger: user_now(repo)},repo),repo,tag)
   end
 
-  @doc "lazily stream parents of a reference, sorted by date"
+  @doc "lazily stream parents of a reference commit, sorted by date"
+  @spec history(someref::binary,Gitex.Repo.t) :: Stream.t
   def history(ref,repo) do
     Stream.resource(fn-> {object(fuzzy_ref(ref,repo),repo),[]} end,fn
       :nomore->{:halt,nil}
@@ -80,6 +99,7 @@ defmodule Gitex do
   take a commit stream (from `history/2`) and lazily 
   add an index of the current branch to ease visualization and tree drawing
   """
+  @spec align_history(Stream.t(Gitex.Repo.commit)) :: Stream.t({integer,Gitex.Repo.commit})
   def align_history(history) do
     Stream.transform(history,{1,HashDict.new}, fn commit, {nextlevel,levels}=acc->
       level = Dict.get(levels,commit.hash,0)

@@ -2,7 +2,7 @@ defmodule Gitex.Git do
   defstruct home_dir: ".git", user: nil
 
   @moduledoc """
-    reference implementation of `Gitex.Codec` and `Gitex.Backend`
+    reference implementation of `Gitex.Repo` protocol
     for the standard git object storage on disk
   """
 
