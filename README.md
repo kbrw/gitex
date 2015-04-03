@@ -19,6 +19,7 @@ TODO:
 
 ## Usage example
 
+
 ```elixir
 r = Gitex.Git.open #Gitex.Git is the .git fs object storage
 Gitex.get("master",r) #get commit
@@ -33,7 +34,7 @@ Gitex.history(r,"master")
 # get the stream of version history of a given file
 Gitex.history(r,"master") 
 |> Stream.map(&Gitex.get_hash(&1,r,"/path/to/file")) 
-|> Stream.uniq 
+|> Stream.dedup
 |> Stream.map(&Gitex.object(&1,r))
 
 # commit history stream is powerful, play with it
