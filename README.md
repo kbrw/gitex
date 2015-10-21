@@ -28,11 +28,11 @@ Gitex.get("master",r,"/path/to/dir")  #get tree object
 Gitex.get("master",r,"/path/to/file") #get blob
 
 # get all commits from master to 1st January 2015
-Gitex.history(r,"master") 
+Gitex.history("master",r) 
 |> Enum.take_while(& &1.committer.utc_time > {{2015,1,1},{0,0,0}})
 
 # get the stream of version history of a given file
-Gitex.history(r,"master") 
+Gitex.history("master",r) 
 |> Stream.map(&Gitex.get_hash(&1,r,"/path/to/file")) 
 |> Stream.dedup
 |> Stream.map(&Gitex.object(&1,r))
