@@ -25,7 +25,10 @@ defmodule Gitex.Git do
     ignorecase = true
     precomposeunicode = true
   """
-  @doc "Initialize a standard GIT repo : same as `git init PATH` command"
+  @doc """
+    Initialize a standard GIT repo (same as `git init PATH` command)
+    and open that repo.
+    """
   def init(path) do
     git_dir = Path.join(path, ".git")
     File.mkdir!(git_dir)
@@ -40,6 +43,7 @@ defmodule Gitex.Git do
     File.touch!(Path.join(git_dir, "description"))
     File.write!(Path.join(git_dir, "config"), @std_git_config)
     File.touch!(Path.join([git_dir, "info", "exclude"]))
+    open(path)
   end
 
   defimpl Gitex.Repo, for: Gitex.Git do
