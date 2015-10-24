@@ -16,6 +16,32 @@ defmodule Gitex.Git do
       else: open(Path.dirname(path))
   end
 
+  @std_git_config ~s"""
+  [core]
+    repositoryformatversion = 0
+    filemode = true
+    bare = false
+    logallrefupdates = true
+    ignorecase = true
+    precomposeunicode = true
+  """
+  @doc "Initialize a standard GIT repo : same as `git init PATH` command"
+  def init(path) do
+    git_dir = Path.join(path, ".git")
+    File.mkdir!(git_dir)
+    File.mkdir!(Path.join(git_dir, "branches"))
+    File.mkdir!(Path.join(git_dir, "hooks"))
+    File.mkdir!(Path.join(git_dir, "info"))
+    File.mkdir_p!(Path.join([git_dir, "objects", "info"]))
+    File.mkdir!(Path.join([git_dir, "objects", "pack"]))
+    File.mkdir_p!(Path.join([git_dir, "refs", "heads"]))
+    File.mkdir!(Path.join([git_dir, "refs", "tags"]))
+    File.write!(Path.join(git_dir, "HEAD"), "ref: refs/heads/master")
+    File.touch!(Path.join(git_dir, "description"))
+    File.write!(Path.join(git_dir, "config"), @std_git_config)
+    File.touch!(Path.join([git_dir, "info", "exclude"]))
+  end
+
   defimpl Gitex.Repo, for: Gitex.Git do
     import Bitwise
 
