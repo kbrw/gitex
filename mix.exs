@@ -3,7 +3,7 @@ defmodule Gitex.Mixfile do
 
   def project do
     [app: :gitex,
-     version: "0.1.0",
+     version: "0.2.0",
      elixir: "~> 1.0",
      docs: [
        readme: "README.md", main: "README",
@@ -21,7 +21,7 @@ defmodule Gitex.Mixfile do
   end
 
   defp package do
-    [ contributors: ["Arnaud Wetzel"],
+    [ maintainers: ["Arnaud Wetzel"],
       licenses: ["The MIT License (MIT)"],
       links: %{ "GitHub"=>"https://github.com/awetzel/gitex"} ]
   end
