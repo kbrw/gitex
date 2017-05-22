@@ -1,4 +1,4 @@
-Gitex [![Build Status](https://travis-ci.org/awetzel/gitex.svg)](https://travis-ci.org/awetzel/gitex)
+Gitex [![Build Status](https://travis-ci.org/kbrw/gitex.svg)](https://travis-ci.org/kbrw/gitex)
 =======
 
 See API documentation at [http://hexdocs.pm/gitex](http://hexdocs.pm/gitex).
