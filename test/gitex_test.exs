@@ -2,7 +2,7 @@ defmodule GitexTest do
   use ExUnit.Case
 
   setup do
-    repo = create_standard_git_repo
+    repo = create_standard_git_repo()
     on_exit(fn->clean_standard_git_repo(repo) end)
     {:ok, repo: repo}
   end
@@ -122,7 +122,7 @@ defmodule GitexTest do
   defp gen_tmp_repo_name, do: "repo_#{:os.system_time(:nano_seconds)}" 
 
   defp create_standard_git_repo do
-    repo_path = Path.join(System.tmp_dir!, gen_tmp_repo_name)
+    repo_path = Path.join(System.tmp_dir!, gen_tmp_repo_name())
     :ok = File.mkdir(repo_path)
     Gitex.Git.init(repo_path)
   end

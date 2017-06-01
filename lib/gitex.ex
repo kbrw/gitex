@@ -87,7 +87,7 @@ defmodule Gitex do
       :nomore->{:halt,nil}
       {current,others}->
         to_compare = Enum.concat(Enum.map(parent_list(current),&object(&1,repo)) ,others)
-        nexts = to_compare |> Enum.uniq(& &1.hash) |> Enum.sort_by(& &1.committer.utc_time) |> Enum.reverse
+        nexts = to_compare |> Enum.uniq_by(& &1.hash) |> Enum.sort_by(& &1.committer.utc_time) |> Enum.reverse
         case nexts do
           [next|others]-> {[current],{next,others}}
           []-> {[current],:nomore}
@@ -101,13 +101,13 @@ defmodule Gitex do
   """
   @spec align_history(Stream.t(Gitex.Repo.commit)) :: Stream.t({integer,Gitex.Repo.commit})
   def align_history(history) do
-    Stream.transform(history,{1,HashDict.new}, fn commit, {nextlevel,levels}=acc->
-      level = Dict.get(levels,commit.hash,0)
+    Stream.transform(history,{1,Map.new}, fn commit, {nextlevel,levels}=acc->
+      level = Map.get(levels,commit.hash,0)
       acc = case parent_list(commit) do
         [head|tail]->
-          levels = Dict.update(levels,head,level,&min(&1,level))
+          levels = Map.update(levels,head,level,&min(&1,level))
           Enum.reduce(tail,{nextlevel,levels},fn h,{nextlevel,levels}->
-            levels[h] && {nextlevel,levels} || {nextlevel+1,Dict.put(levels,h,nextlevel)}
+            levels[h] && {nextlevel,levels} || {nextlevel+1,Map.put(levels,h,nextlevel)}
           end)
         []->acc 
       end
@@ -155,7 +155,7 @@ defmodule Gitex do
   end
 
   defp user_now(repo) do
-    now = :erlang.now
+    now = :erlang.timestamp
     base = %{name: "anonymous", email: "anonymous@localhost",
              local_time: :calendar.now_to_local_time(now), utc_time: :calendar.now_to_universal_time(now)}
     Enum.into(Gitex.Repo.user(repo) || Application.get_env(:gitex,:anonymous_user,[]),base)

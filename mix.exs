@@ -10,9 +10,9 @@ defmodule Gitex.Mixfile do
        source_url: "https://github.com/awetzel/gitex",
        source_ref: "master"
      ],
-     package: package,
-     description: description,
-     deps: [{:ex_doc, only: :dev}]]
+     package: package(),
+     description: description(),
+     deps: [{:ex_doc, ">= 0.0.0", only: :dev}]]
   end
 
   def application do

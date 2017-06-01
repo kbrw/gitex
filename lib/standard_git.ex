@@ -96,15 +96,15 @@ defmodule Gitex.Git do
         {:"#{k}",parse_meta(:"#{k}",v)}
       end) 
       |> Enum.reduce(%{},fn {k,v},map->
-        Dict.update(map,k,v,& is_list(&1) && [v|&1] || [v,&1])
+         Map.update(map,k,v,& is_list(&1) && [v|&1] || [v,&1])
       end)
-      |> Dict.put(:message,message)
-      |> Dict.put(:hash,hash)
+      |> Map.put(:message,message)
+      |> Map.put(:hash,hash)
     end
 
     @field_order %{tree: 0, parent: 1, author: 2, committer: 3, object: 4, type: 5, tag: 6, tagger: 7}
     defp encode_obj(%{message: message}=obj) do
-      metas = Dict.drop(obj,[:message,:hash])
+      metas = Map.drop(obj,[:message,:hash])
         |> Enum.sort_by(fn {k,_}->@field_order[k] end)
         |> Enum.map(fn {k,v}->encode_meta("#{k}",v) end)
       IO.iodata_to_binary([metas,?\n,message])
