@@ -135,7 +135,8 @@ defmodule Gitex.Git do
     defp parse_tree(""), do: []
     defp parse_tree(bin) do
       [modename,<<ref::binary-size(20)>> <> rest] = String.split(bin,<<0>>,parts: 2)
-      [modetype,name] = String.split(modename," ")
+      [modetype|name] = String.split(modename," ")
+      name = name |> Enum.join(" ")
       {type,mode} = case modetype do "1"<>r->{:file,r} ; m->{:dir,m} end
       ref = Base.encode16(ref,case: :lower)
       [%{name: name,mode: mode, type: type, ref: ref}|parse_tree(rest)]
