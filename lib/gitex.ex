@@ -56,6 +56,17 @@ defmodule Gitex do
     put(get(ref,repo),repo,path,elem)
 
   @doc """
+  - from a root tree to alter
+  - save the changed trees from sub tree removal
+  - return a new root tree hash
+  """
+  @spec delete((someref::binary) | Gitex.Repo.commit | Gitex.Repo.tag | Gitex.Repo.tree,Gitex.Repo.t,path::binary) :: Gitex.Repo.hash
+  def delete(%{tree: tree},repo, path), do: delete(object(tree,repo),repo,path)
+  def delete(%{object: ref},repo,path), do: delete(object(ref, repo),repo,path)
+  def delete(tree,repo,path) when is_list(tree), do: delete_path(tree, repo, path |> String.trim("/") |> String.split("/"))
+  def delete(ref,repo,path), do: delete(get(ref,repo),repo,path)
+
+  @doc """
   save a new commit :
 
   - `tree_hash` is the tree which must be referenced by this commit, use "put" to construct it
@@ -152,6 +163,17 @@ defmodule Gitex do
     {type,ref} = put_path(childtree,repo,path,elem)
     {type,mode} = if type==:tree do {:dir,"40000"} else {:file,"00777"} end
     {:tree,save_object([%{name: name, mode: mode, type: type, ref: ref}|Enum.reject(tree, & &1.name==name)],repo)}
+  end
+
+  defp delete_path(tree,repo,[name]) do
+    save_object(tree |> Enum.filter(fn %{name: n} -> n != name end),repo)
+  end
+  defp delete_path(tree,repo,[name|path]) do
+    save_object(tree |> Enum.map(fn
+      m = %{name: ^name} ->
+        Map.update!(m, :ref, fn ref -> delete_path(object(ref, repo), repo, path) end)
+      m -> m
+    end),repo)
   end
 
   defp user_now(repo) do
