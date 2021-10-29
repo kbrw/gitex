@@ -60,3 +60,9 @@ Gitex.history(:head,repo) |> Gitex.align_history
 
 Any repo implementing the `Gitex.Repo` protocol : (basically object codec, ref
 setter/resolver, binary get/put) can be managed with the `Gitex` API.
+
+# CONTRIBUTING
+
+Hi, and thank you for wanting to contribute.
+Please refer to the centralized informations available at: https://github.com/kbrw#contributing
+
