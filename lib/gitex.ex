@@ -40,7 +40,7 @@ defmodule Gitex do
   def get_hash(ref,repo,path), do: get_hash(get(ref,repo),repo,path)
 
   def get_hash(hash,tree,repo,path), do: 
-    get_hash_path(hash,tree,repo,path |> String.trim("?") |>  String.split("/"))
+    get_hash_path(hash,tree,repo,path |> String.trim("/") |>  String.split("/"))
    
   @doc """
   - from some reference or object, get a root tree to alter
@@ -51,7 +51,7 @@ defmodule Gitex do
   def put(%{tree: tree},repo,path,elem), do: put(object(tree,repo),repo,path,elem)
   def put(%{object: ref},repo,path,elem), do: put(object(ref,repo),repo,path,elem)
   def put(tree,repo,path,elem) when is_list(tree), do:
-    ({:tree,ref}=put_path(tree,repo,path |> String.trim("?") |>  String.split("/"),elem); ref)
+    ({:tree,ref}=put_path(tree,repo,path |> String.trim("/") |>  String.split("/"),elem); ref)
   def put(ref,repo,path,elem), do: 
     put(get(ref,repo),repo,path,elem)
 
