@@ -1,7 +1,7 @@
 defmodule Gitex do
   @type tag    :: {:tag,String.t}
   @type branch :: {:branch,String.t}
-  @type remote :: {:remote,remote::String.t,:head | branch::String.t}
+  @type remote :: {:remote,remote::String.t,(:head | (branch::String.t))}
   @type ref :: :head | tag | branch | remote
 
   @moduledoc """
@@ -40,7 +40,7 @@ defmodule Gitex do
   def get_hash(ref,repo,path), do: get_hash(get(ref,repo),repo,path)
 
   def get_hash(hash,tree,repo,path), do: 
-    get_hash_path(hash,tree,repo,path |> String.strip(?/) |>  String.split("/"))
+    get_hash_path(hash,tree,repo,path |> String.trim("?") |>  String.split("/"))
    
   @doc """
   - from some reference or object, get a root tree to alter
@@ -51,7 +51,7 @@ defmodule Gitex do
   def put(%{tree: tree},repo,path,elem), do: put(object(tree,repo),repo,path,elem)
   def put(%{object: ref},repo,path,elem), do: put(object(ref,repo),repo,path,elem)
   def put(tree,repo,path,elem) when is_list(tree), do:
-    ({:tree,ref}=put_path(tree,repo,path |> String.strip(?/) |>  String.split("/"),elem); ref)
+    ({:tree,ref}=put_path(tree,repo,path |> String.trim("?") |>  String.split("/"),elem); ref)
   def put(ref,repo,path,elem), do: 
     put(get(ref,repo),repo,path,elem)
 
@@ -73,7 +73,7 @@ defmodule Gitex do
   - `branches` hashes will be commit parents, and these branches specs will be updated after commit
   - committer and author are taken from `Gitex.Repo.user` or `Application.get_env(:gitex,:anonymous_user)` if `nil`
   """
-  @spec commit(Gitex.Repo.hash,Gitex.Repo.t,[branch::binary]|branch::binary,binary) :: Gitex.Repo.hash
+  @spec commit(Gitex.Repo.hash,Gitex.Repo.t,([branch::binary]|(branch::binary)),binary) :: Gitex.Repo.hash
   def commit(tree_hash,repo,branches,message) when is_list(branches) do
     committer = author = user_now(repo)
     parents = Enum.map(branches,&Gitex.Repo.resolve_ref(repo,refpath({:branch,&1}))) |> Enum.filter(&!is_nil(&1))

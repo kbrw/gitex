@@ -7,7 +7,7 @@ defmodule Gitex.Git do
   """
 
   @doc "Standard GIT repo : recursively find .git directory"
-  def open, do: open(System.cwd!)
+  def open, do: open(File.cwd!)
   def open("/"), do: nil
   def open(path) do
     gitdir = "#{path}/.git"
@@ -79,7 +79,7 @@ defmodule Gitex.Git do
     end
   
     def resolve_ref(repo,"HEAD"), do: 
-      raw_ref(repo,read!(repo,"HEAD") |> String.rstrip(?\n))
+      raw_ref(repo,read!(repo,"HEAD") |> String.trim_trailing("\n"))
     def resolve_ref(repo,refpath), do:
       (nilify(read(repo,refpath)) || packed_resolve_ref(nilify(read(repo,"packed-refs")),refpath))
 
@@ -127,7 +127,7 @@ defmodule Gitex.Git do
       utc = :calendar.datetime_to_gregorian_seconds(utc_time)
       offset = :calendar.datetime_to_gregorian_seconds(local_time)-utc
       {sign,{delta_h,delta_m,_}}={if(offset>0,do: ?+,else: ?-),:calendar.seconds_to_time(abs(offset))}
-      [k,?\s,name,?\s,?<,email,?>,?\s,"#{utc-@gregorian1970}",?\s,sign,String.rjust("#{delta_h}",2,?0),String.rjust("#{delta_m}",2,?0),?\n]
+      [k,?\s,name,?\s,?<,email,?>,?\s,"#{utc-@gregorian1970}",?\s,sign,String.pad_leading("#{delta_h}",2,"0"),String.pad_leading("#{delta_m}",2,"0"),?\n]
     end
     defp encode_meta(k,v) when is_atom(v), do: encode_meta(k,"#{v}")
     defp encode_meta(k,v), do: [k,?\s,v,?\n]
@@ -153,7 +153,7 @@ defmodule Gitex.Git do
     defp raw_ref(repo,"ref: "<>ref), do: nilify(read(repo,ref))
     defp raw_ref(_,ref), do: ref
 
-    defp nilify({:ok,v}), do: String.rstrip(v,?\n)
+    defp nilify({:ok,v}), do: String.trim_trailing(v,"\n")
     defp nilify({:error,:enoent}), do: nil
 
     defp packed_resolve_ref(nil,_), do: nil
@@ -239,8 +239,8 @@ defmodule Gitex.Git do
     defp apply_delta_hunks(acc,base,<<0::size(1),add_len::size(7),add::binary-size(add_len)>> <> delta), do:
       apply_delta_hunks([acc,add],base,delta)
     defp apply_delta_hunks(acc,base,<<1::size(1),len_shift::bitstring-size(3),off_shift::bitstring-size(4)>> <> delta) do
-      off_ops = Enum.zip([0,8,16,24],Enum.reverse(for(<<x::size(1)<-off_shift>>,do: x))) |> Enum.filter_map(& elem(&1,1)==1,& elem(&1,0))
-      len_ops = Enum.zip([0,8,16],Enum.reverse(for(<<x::size(1)<-len_shift>>,do: x))) |> Enum.filter_map(& elem(&1,1)==1,& elem(&1,0))
+      off_ops = Enum.zip([0,8,16,24],Enum.reverse(for(<<x::size(1)<-off_shift>>,do: x))) |> Stream.filter(& elem(&1,1)==1) |> Enum.map(& elem(&1,0))
+      len_ops = Enum.zip([0,8,16],Enum.reverse(for(<<x::size(1)<-len_shift>>,do: x))) |> Stream.filter(& elem(&1,1)==1) |> Enum.map(& elem(&1,0))
       {off,delta}=Enum.reduce(off_ops,{0,delta},fn shift,{off,<<byte>><>delta}-> {off ||| (byte<<<shift),delta} end)
       {len,delta}=Enum.reduce(len_ops,{0,delta},fn shift,{off,<<byte>><>delta}-> {off ||| (byte<<<shift),delta} end)
       len = (len==0) && 0x10000 || len
