@@ -14,7 +14,7 @@ defmodule Gitex.Mixfile do
      package: package(),
      description: description(),
      elixirc_options: [warnings_as_errors: true],
-     deps: [{:ex_doc, "~> 0.19", only: :dev, runtime: false}]]
+     deps: [{:ex_doc, ">= 0.0.0", only: :dev}]]
   end
 
   def application do
