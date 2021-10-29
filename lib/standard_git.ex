@@ -239,8 +239,8 @@ defmodule Gitex.Git do
     defp apply_delta_hunks(acc,base,<<0::size(1),add_len::size(7),add::binary-size(add_len)>> <> delta), do:
       apply_delta_hunks([acc,add],base,delta)
     defp apply_delta_hunks(acc,base,<<1::size(1),len_shift::bitstring-size(3),off_shift::bitstring-size(4)>> <> delta) do
-      off_ops = Enum.zip([0,8,16,24],Enum.reverse(for(<<x::size(1)<-off_shift>>,do: x))) |> Stream.filter(& elem(&1,1)==1) |> Enum.map(& elem(&1,0))
-      len_ops = Enum.zip([0,8,16],Enum.reverse(for(<<x::size(1)<-len_shift>>,do: x))) |> Stream.filter(& elem(&1,1)==1) |> Enum.map(& elem(&1,0))
+      off_ops = Enum.zip([0,8,16,24],Enum.reverse(for(<<x::size(1)<-off_shift>>,do: x))) |> Enum.filter(& elem(&1,1)==1) |> Enum.map(& elem(&1,0))
+      len_ops = Enum.zip([0,8,16],Enum.reverse(for(<<x::size(1)<-len_shift>>,do: x))) |> Enum.filter(& elem(&1,1)==1) |> Enum.map(& elem(&1,0))
       {off,delta}=Enum.reduce(off_ops,{0,delta},fn shift,{off,<<byte>><>delta}-> {off ||| (byte<<<shift),delta} end)
       {len,delta}=Enum.reduce(len_ops,{0,delta},fn shift,{off,<<byte>><>delta}-> {off ||| (byte<<<shift),delta} end)
       len = (len==0) && 0x10000 || len
