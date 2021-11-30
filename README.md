@@ -11,11 +11,11 @@ See API documentation at [http://hexdocs.pm/gitex](http://hexdocs.pm/gitex).
 
 TODO:
 
-- test it (only for regression, currently it works on many open source git repo, so it can be considered as tested)
-- add a `Gitex.merge` helper to help you construct a commit tree from multiple trees
-- add impl `Gitex.Repo` for Pid as a GenServer RPC
-- implementation example of previous GenServer maintaining ETS LRU cache of standard git fs objects and deltas
-- add some useful alternative implementations, currently only standard object encoding and storage
+- [x] test it (only for regression, currently it works on many open source git repo, so it can be considered as tested)
+- [ ] add a `Gitex.merge` helper to help you construct a commit tree from multiple trees
+- [x] add impl `Gitex.Repo` for Pid as a GenServer RPC
+- [ ] implementation example of previous GenServer maintaining ETS LRU cache of standard git fs objects and deltas
+- [ ] add some useful alternative implementations, currently only standard object encoding and storage
 
 ## Usage example
 
@@ -55,6 +55,18 @@ history stream in order to construct a pretty visualizer very easily (d3.js for 
 ```elixir
 Gitex.history(:head,repo) |> Gitex.align_history
 ```
+
+`Gitex.Server` provides a GenServer implementation (implementing `Gitex.Repo`for PIDs).
+This implementation relies on an underlying `Gitex.Repo` that is provided at initialization:
+
+```elixir
+r = Gitex.Git.open                           # Create a standard (reference impl) Gitex.Repo
+{:ok, repo_pid} = Gitex.Server.start_link(r) # Create a GenServer Gitex.Repo
+Gitex.history("master", repo_pid)            # print history stream
+|> Stream.each(&IO.puts "* #{String.slice(&1.hash, 0 ,7)} #{&1.message}")
+|> Stream.run
+```
+
 
 ## The Gitex.Repo protocol
 
